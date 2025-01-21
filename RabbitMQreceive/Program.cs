@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using RabbitMQ.Client;
@@ -8,39 +9,68 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        // Step 1: Create a connection to RabbitMQ
-        var factory = new ConnectionFactory { HostName = "localhost" };
-        var connection = await factory.CreateConnectionAsync(); // Asynchronously create a connection
-        var channel = await connection.CreateChannelAsync(); // Asynchronously create a channel
-
-        // Step 2: Declare a queue named "hello"
-        await channel.QueueDeclareAsync(
-            queue: "hello",          // Queue name
-            durable: false,          // Queue is not durable (not persistent across restarts)
-            exclusive: false,        // Queue is not exclusive to this connection
-            autoDelete: false,       // Queue will not be automatically deleted
-            arguments: null          // No additional arguments
-        );
-
-        Console.WriteLine(" [*] Waiting for messages.");
-
-        // Step 3: Create a consumer to listen for messages
-        var consumer = new AsyncEventingBasicConsumer(channel);
-
-        // Step 4: Define the logic to process messages when received
-        consumer.ReceivedAsync += async (model, ea) =>
+        try
         {
-            var body = ea.Body.ToArray();  // Get the body of the message
-            var message = Encoding.UTF8.GetString(body);  // Convert the byte array to a string
-            Console.WriteLine($" [x] Received {message}");  // Print the received message
-            await Task.CompletedTask;  // Mark the message handling as complete
-        };
+            // Step 1: Create a connection to RabbitMQ
+            var factory = new ConnectionFactory() { HostName = "localhost" };
+            using (var connection = await factory.CreateConnectionAsync()) // Open connection
+            using (var channel = await connection.CreateChannelAsync()) // Open channel
+            {
+                // Step 2: Declare the queues (same as producer)
+                string[] queues = { "sample1", "sample2", "TestQueue", "hello" };
 
-        // Step 5: Start consuming messages from the "hello" queue
-        await channel.BasicConsumeAsync("hello", autoAck: true, consumer: consumer);
+                foreach (var queue in queues)
+                {
+                    // Declare each queue (you can also add any specific queue properties you need)
+                    await channel.QueueDeclareAsync(
+                        queue: queue,
+                        durable: true,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: null
+                    );
+                }
 
-        // Step 6: Wait for the user to press Enter before exiting
-        Console.WriteLine(" Press [enter] to exit.");
-        Console.ReadLine();
+                // Step 3: Create and start consumers for each queue
+                var consumerTasks = new List<Task>();
+
+                foreach (var queue in queues)
+                {
+                    var consumer = new AsyncEventingBasicConsumer(channel);
+
+                    // Define logic for when a message is received
+                    consumer.ReceivedAsync += async (model, ea) =>
+                    {
+                        var body = ea.Body.ToArray();  // Get the body of the message
+                        var message = Encoding.UTF8.GetString(body);  // Convert byte array to string
+
+                        // Step 4: Process the message
+                        Console.WriteLine($" [x] Received from {queue}: '{message}'");
+
+                        // Simulate async processing (e.g., saving to a database or handling business logic)
+                        await Task.Delay(1000);
+                        Console.WriteLine($" [x] Processed from {queue}: '{message}'");
+                    };
+
+                    // Start consuming messages from the queue
+                    consumerTasks.Add(channel.BasicConsumeAsync(
+                        queue: queue,
+                        autoAck: false,  // Automatically acknowledge messages when received
+                        consumer: consumer
+                    ));
+                }
+
+                // Step 5: Wait for all consumers to finish processing
+                await Task.WhenAll(consumerTasks);
+
+                // Keep the application running and wait for messages
+                Console.WriteLine(" [*] Waiting for messages. Press [Enter] to exit.");
+                Console.ReadLine();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+        }
     }
 }
