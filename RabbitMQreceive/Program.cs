@@ -4,6 +4,8 @@ using System.Text;
 using System.Threading.Tasks;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using Newtonsoft;
+using Newtonsoft.Json;
 
 class Program
 {
@@ -17,7 +19,7 @@ class Program
             using (var channel = await connection.CreateChannelAsync()) // Open channel
             {
                 // Step 2: Declare the queues (same as producer)
-                string[] queues = { "sample1", "sample2", "TestQueue", "hello" };
+                string[] queues = { "bounceQueue", "defRevQueue", "writeOffQueue", "salesTaxQueue" };
 
                 foreach (var queue in queues)
                 {
@@ -43,13 +45,14 @@ class Program
                     {
                         var body = ea.Body.ToArray();  // Get the body of the message
                         var message = Encoding.UTF8.GetString(body);  // Convert byte array to string
+                        var jsonmessage = JsonConvert.DeserializeObject<List<Dictionary<string,string>>>(message);
 
                         // Step 4: Process the message
                         Console.WriteLine($" [x] Received from {queue}: '{message}'");
 
                         // Simulate async processing (e.g., saving to a database or handling business logic)
-                        await Task.Delay(1000);
-                        Console.WriteLine($" [x] Processed from {queue}: '{message}'");
+                        //await Task.Delay(1000);
+                        //Console.WriteLine($" [x] Processed from {queue}: '{message}'");
                     };
 
                     // Start consuming messages from the queue
